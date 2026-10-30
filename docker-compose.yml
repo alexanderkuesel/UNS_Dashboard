@@ -1,8 +1,9 @@
 # UNS / ISA-95 dashboards for Grafana.
 #
 #   cp .env.example .env    # then edit
-#   docker compose up -d                    # Grafana only, uses your existing TimescaleDB
-#   docker compose --profile demo up -d     # + a throw-away TimescaleDB with live demo data
+#   docker compose up -d                    # Grafana only, uses your existing historian(s)
+#   docker compose --profile demo up -d     # + throw-away TimescaleDB and MariaDB with live demo data
+#                                           #   (or --profile demo-timescaledb / demo-mariadb for one)
 #
 # Images are multi-arch, so this runs unchanged on a Raspberry Pi (arm64).
 
@@ -16,7 +17,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/uns/uns-overview.json
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: ${GRAFANA_HOME_DASHBOARD:-/var/lib/grafana/dashboards/uns/timescaledb/uns-overview.json}
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
@@ -26,14 +27,19 @@ services:
       UNS_PG_PORT: ${UNS_PG_PORT:-5432}
       UNS_PG_DB: ${UNS_PG_DB:-home_data}
       UNS_PG_USER: ${UNS_PG_USER:-grafana}
-      UNS_PG_PASSWORD: ${UNS_PG_PASSWORD:?set UNS_PG_PASSWORD in .env}
+      UNS_PG_PASSWORD: ${UNS_PG_PASSWORD:-}
       UNS_PG_SSLMODE: ${UNS_PG_SSLMODE:-disable}
+      UNS_MARIADB_HOST: ${UNS_MARIADB_HOST:-host.docker.internal}
+      UNS_MARIADB_PORT: ${UNS_MARIADB_PORT:-3306}
+      UNS_MARIADB_DB: ${UNS_MARIADB_DB:-uns}
+      UNS_MARIADB_USER: ${UNS_MARIADB_USER:-grafana}
+      UNS_MARIADB_PASSWORD: ${UNS_MARIADB_PASSWORD:-}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards/uns:ro
       - grafana-data:/var/lib/grafana
     extra_hosts:
-      # lets the container reach a TimescaleDB that publishes 5432 on the Pi itself
+      # lets the container reach databases that publish their port on the Pi itself
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health || exit 1"]
@@ -42,9 +48,9 @@ services:
       retries: 10
       start_period: 30s
 
-  # --- demo profile: self-contained database with 14 days of history -------
+  # --- demo profiles: self-contained databases with 14 days of history -----
   demo-db:
-    profiles: ["demo"]
+    profiles: ["demo", "demo-timescaledb"]
     image: timescale/timescaledb:${TIMESCALEDB_VERSION:-2.30.2-pg17}
     container_name: uns-demo-db
     restart: unless-stopped
@@ -57,7 +63,7 @@ services:
     volumes:
       - ./db:/uns/db:ro
       - ./tools:/uns/tools:ro
-      - ./db/demo/initdb.sh:/docker-entrypoint-initdb.d/10-uns-demo.sh:ro
+      - ./db/demo/initdb_timescaledb.sh:/docker-entrypoint-initdb.d/10-uns-demo.sh:ro
       - demo-db-data:/var/lib/postgresql/data
     healthcheck:
       # TCP only: the init-time server listens on the socket alone
@@ -68,7 +74,7 @@ services:
       start_period: 60s
 
   demo-feed:
-    profiles: ["demo"]
+    profiles: ["demo", "demo-timescaledb"]
     image: timescale/timescaledb:${TIMESCALEDB_VERSION:-2.30.2-pg17}
     container_name: uns-demo-feed
     restart: unless-stopped
@@ -86,6 +92,33 @@ services:
         echo "demo-feed: writing one sample per demo point every minute"
         while true; do psql -X -q -c 'CALL demo.tick()' || true; sleep 60; done
 
+  # MariaDB keeps itself live: the demo seed installs an EVENT that writes
+  # one sample per point every minute (needs event_scheduler=ON).
+  demo-mariadb:
+    profiles: ["demo", "demo-mariadb"]
+    image: mariadb:${MARIADB_VERSION:-11.4}
+    container_name: uns-demo-mariadb
+    restart: unless-stopped
+    command: ["--event-scheduler=ON"]
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DEMO_MARIADB_ROOT_PASSWORD:-root}
+      UNS_MARIADB_PASSWORD: ${UNS_MARIADB_PASSWORD:?set UNS_MARIADB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${DEMO_MARIADB_PORT:-53306}:3306"
+    volumes:
+      - ./db:/uns/db:ro
+      - ./tools:/uns/tools:ro
+      - ./db/demo/initdb_mariadb.sh:/docker-entrypoint-initdb.d/10-uns-demo.sh:ro
+      - demo-mariadb-data:/var/lib/mysql
+    healthcheck:
+      # --connect fails while the init-time server runs with skip-networking
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
 volumes:
   grafana-data:
   demo-db-data:
+  demo-mariadb-data:

@@ -4,7 +4,7 @@
 set -euo pipefail
 export PGUSER="$POSTGRES_USER" PGDATABASE="$POSTGRES_DB"
 
-psql -v ON_ERROR_STOP=1 -q -f /uns/db/source/muthur_historian.sql
+psql -v ON_ERROR_STOP=1 -q -f /uns/db/source/muthur_historian_timescaledb.sql
 psql -v ON_ERROR_STOP=1 -q -c "ALTER ROLE grafana PASSWORD '${UNS_PG_PASSWORD//\'/\'\'}'"
-psql -v ON_ERROR_STOP=1 -q -f /uns/db/demo/seed_muthur_demo.sql
-ADAPTER=muthur_historian READER=grafana PSQL=psql /uns/tools/install_uns.sh
+psql -v ON_ERROR_STOP=1 -q -f /uns/db/demo/seed_muthur_demo_timescaledb.sql
+ENGINE=postgres ADAPTER=muthur_historian READER=grafana PSQL=psql /uns/tools/install_uns.sh

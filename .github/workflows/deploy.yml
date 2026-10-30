@@ -12,11 +12,12 @@ on:
   workflow_dispatch:
     inputs:
       install_uns:
-        description: "Re-install the uns schema (views/functions) in the historian database"
-        type: boolean
-        default: false
+        description: "Re-install the uns layer (views/functions) in a historian database"
+        type: choice
+        options: [none, timescaledb, mariadb, both]
+        default: none
       demo:
-        description: "Also run the demo database + feed (docker compose --profile demo)"
+        description: "Also run the demo databases (docker compose --profile demo)"
         type: boolean
         default: false
 
@@ -34,6 +35,7 @@ jobs:
       DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
       TIMESCALE_CONTAINER: ${{ vars.TIMESCALE_CONTAINER || 'timescaledb' }}
       PG_ADMIN_USER: ${{ vars.PG_ADMIN_USER || 'postgres' }}
+      MARIADB_CONTAINER: ${{ vars.MARIADB_CONTAINER || 'mariadb' }}
       UNS_ADAPTER: ${{ vars.UNS_ADAPTER || 'muthur_historian' }}
     steps:
       - name: Resolve deploy directory
@@ -52,13 +54,24 @@ jobs:
             exit 1
           fi
 
-      - name: Install uns schema
-        if: inputs.install_uns
+      - name: Install uns layer (TimescaleDB)
+        if: inputs.install_uns == 'timescaledb' || inputs.install_uns == 'both'
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
           db=$(grep -E '^UNS_PG_DB=' .env | cut -d= -f2-)
-          ADAPTER="$UNS_ADAPTER" READER=grafana \
+          ENGINE=postgres ADAPTER="$UNS_ADAPTER" READER=grafana \
           PSQL="docker exec -i $TIMESCALE_CONTAINER psql -U $PG_ADMIN_USER -d ${db:-home_data}" \
+            tools/install_uns.sh
+
+      - name: Install uns layer (MariaDB)
+        if: inputs.install_uns == 'mariadb' || inputs.install_uns == 'both'
+        working-directory: ${{ env.DEPLOY_DIR }}
+        env:
+          # repository secret; passed to the client via MYSQL_PWD, never on the command line
+          MYSQL_PWD: ${{ secrets.MARIADB_ROOT_PASSWORD }}
+        run: |
+          ENGINE=mariadb ADAPTER="$UNS_ADAPTER" READER=grafana \
+          MARIADB="docker exec -i -e MYSQL_PWD $MARIADB_CONTAINER mariadb -uroot" \
             tools/install_uns.sh
 
       - name: docker compose up

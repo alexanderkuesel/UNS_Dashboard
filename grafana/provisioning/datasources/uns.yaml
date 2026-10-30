@@ -1,6 +1,8 @@
 # One data source per database. To add another schema/database, copy the
-# block with a new name + uid; the dashboards' "Data source" picker then
-# switches between them (each database needs the uns layer installed).
+# block of the same type with a new name + uid; the dashboards' "Data
+# source" picker then switches between them (each database needs the uns
+# layer installed). TimescaleDB dashboards list postgres data sources,
+# MariaDB dashboards list mysql ones.
 apiVersion: 1
 
 datasources:
@@ -21,3 +23,18 @@ datasources:
       connMaxLifetime: 14400
     secureJsonData:
       password: ${UNS_PG_PASSWORD}
+
+  - name: UNS Historian (MariaDB)
+    uid: uns-historian-mariadb
+    type: mysql
+    url: ${UNS_MARIADB_HOST}:${UNS_MARIADB_PORT}
+    user: ${UNS_MARIADB_USER}
+    editable: false
+    jsonData:
+      database: ${UNS_MARIADB_DB}
+      timezone: "+00:00"   # historian DATETIMEs are UTC; keep bucket maths independent of the server zone
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${UNS_MARIADB_PASSWORD}

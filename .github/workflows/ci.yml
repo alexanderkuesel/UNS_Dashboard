@@ -26,25 +26,34 @@ jobs:
       - name: Shell scripts
         run: shellcheck tools/*.sh db/demo/*.sh
 
-      - name: Start demo stack (TimescaleDB + historian schema + demo data + Grafana)
+      - name: Start demo stack (TimescaleDB + MariaDB historians with demo data, Grafana)
         run: |
           cp .env.example .env
           sed -i -e 's/^UNS_PG_HOST=.*/UNS_PG_HOST=demo-db/' \
+                 -e 's/^UNS_MARIADB_HOST=.*/UNS_MARIADB_HOST=demo-mariadb/' \
                  -e 's/^UNS_PG_PASSWORD=.*/UNS_PG_PASSWORD=ci-grafana/' \
+                 -e 's/^UNS_MARIADB_PASSWORD=.*/UNS_MARIADB_PASSWORD=ci-grafana/' \
                  -e 's/^GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=ci-admin/' .env
           docker compose config -q
-          docker compose --profile demo up -d --wait --wait-timeout 300
+          docker compose --profile demo up -d --wait --wait-timeout 400
 
-      - name: Every panel query runs as the read-only grafana role
-        run: python3 tools/check_queries.py --require-rows
+      - name: Every TimescaleDB panel query runs as the read-only grafana role
+        run: python3 tools/check_queries.py --engine timescaledb --require-rows
 
-      - name: Grafana provisioned the data source and dashboards
+      - name: Every MariaDB panel query runs as the read-only grafana user
+        env:
+          MARIADB: docker exec -i uns-demo-mariadb mariadb -u grafana -pci-grafana
+        run: python3 tools/check_queries.py --engine mariadb --require-rows
+
+      - name: Grafana provisioned the data sources and dashboards
         run: |
           api() { curl -fsS -u admin:ci-admin "http://localhost:3000$1"; }
-          api /api/datasources/uid/uns-historian/health | tee /dev/stderr | grep -q '"status":"OK"'
+          for uid in uns-historian uns-historian-mariadb; do
+            api "/api/datasources/uid/$uid/health" | tee /dev/stderr | grep -q '"status":"OK"'
+          done
           n=$(api '/api/search?tag=uns' | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
           echo "provisioned dashboards: $n"
-          test "$n" -eq "$(ls grafana/dashboards/*.json | wc -l)"
+          test "$n" -eq "$(find grafana/dashboards -name '*.json' | wc -l)"
 
       - name: Logs on failure
         if: failure()

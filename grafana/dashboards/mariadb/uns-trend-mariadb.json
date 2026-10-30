@@ -1,10 +1,12 @@
 {
-  "uid": "uns-trend",
-  "title": "UNS · Point trend",
+  "uid": "uns-trend-mariadb",
+  "title": "UNS · Point trend (MariaDB)",
   "description": "Trend any point by its UNS path, with min/max envelope, statistics and raw samples.",
   "tags": [
     "uns",
-    "isa-95"
+    "isa-95",
+    "mariadb",
+    "uns-mariadb"
   ],
   "editable": true,
   "graphTooltip": 1,
@@ -25,10 +27,10 @@
         "name": "ds",
         "label": "Data source",
         "type": "datasource",
-        "query": "grafana-postgresql-datasource",
+        "query": "mysql",
         "current": {
-          "text": "UNS Historian",
-          "value": "uns-historian"
+          "text": "UNS Historian (MariaDB)",
+          "value": "uns-historian-mariadb"
         },
         "hide": 0,
         "refresh": 1,
@@ -52,11 +54,11 @@
         "label": "Point",
         "type": "query",
         "datasource": {
-          "type": "grafana-postgresql-datasource",
+          "type": "mysql",
           "uid": "${ds}"
         },
-        "query": "SELECT p.uns_path AS __text, p.point_id AS __value FROM uns.points p WHERE p.uns_path ILIKE '%' || ${search:sqlstring} || '%' ORDER BY 1",
-        "definition": "SELECT p.uns_path AS __text, p.point_id AS __value FROM uns.points p WHERE p.uns_path ILIKE '%' || ${search:sqlstring} || '%' ORDER BY 1",
+        "query": "SELECT p.uns_path AS __text, p.point_id AS __value FROM uns.points p WHERE p.uns_path LIKE CONCAT('%', ${search:sqlstring}, '%') ORDER BY 1",
+        "definition": "SELECT p.uns_path AS __text, p.point_id AS __value FROM uns.points p WHERE p.uns_path LIKE CONCAT('%', ${search:sqlstring}, '%') ORDER BY 1",
         "refresh": 2,
         "multi": true,
         "includeAll": false,
@@ -89,7 +91,7 @@
       "title": "UNS",
       "type": "dashboards",
       "tags": [
-        "uns"
+        "uns-mariadb"
       ],
       "asDropdown": false,
       "includeVars": false,
@@ -106,7 +108,7 @@
       "title": "${point:text}",
       "description": "Bucket average with the min/max envelope.",
       "datasource": {
-        "type": "grafana-postgresql-datasource",
+        "type": "mysql",
         "uid": "${ds}"
       },
       "gridPos": {
@@ -119,13 +121,13 @@
         {
           "refId": "A",
           "datasource": {
-            "type": "grafana-postgresql-datasource",
+            "type": "mysql",
             "uid": "${ds}"
           },
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT t.time, t.avg, t.min, t.max FROM uns.trend(ARRAY[${point:sqlstring}]::integer[], $__timeFrom(), $__timeTo(), $__interval_ms * interval '1 millisecond') t ORDER BY 1"
+          "rawSql": "SELECT t.time, t.avg, t.min, t.max FROM ( SELECT FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(r.time) / GREATEST(FLOOR($__interval_ms / 1000), 1)) * GREATEST(FLOOR($__interval_ms / 1000), 1)) AS time, r.point_id, AVG(r.value) AS avg, MIN(r.value) AS min, MAX(r.value) AS max, COUNT(*) AS samples FROM uns.readings r WHERE NOT ($__interval_ms >= 3600000 OR $__unixEpochTo() - $__unixEpochFrom() >= 604800) AND r.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.point_id IN (${point:sqlstring})) AND $__timeFilter(r.time) GROUP BY 1, 2 UNION ALL SELECT FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(h.time) / GREATEST(FLOOR($__interval_ms / 1000), 3600)) * GREATEST(FLOOR($__interval_ms / 1000), 3600)), h.point_id, SUM(h.avg * h.samples) / NULLIF(SUM(h.samples), 0), MIN(h.min), MAX(h.max), CAST(SUM(h.samples) AS INTEGER) FROM uns.readings_1h h WHERE ($__interval_ms >= 3600000 OR $__unixEpochTo() - $__unixEpochFrom() >= 604800) AND h.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.point_id IN (${point:sqlstring})) AND h.time >= FROM_UNIXTIME(FLOOR($__unixEpochFrom() / 3600) * 3600) AND h.time < $__timeTo() GROUP BY 1, 2) t ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -234,7 +236,7 @@
       "title": "Statistics",
       "description": "Computed from raw samples in the selected time range.",
       "datasource": {
-        "type": "grafana-postgresql-datasource",
+        "type": "mysql",
         "uid": "${ds}"
       },
       "gridPos": {
@@ -247,13 +249,13 @@
         {
           "refId": "A",
           "datasource": {
-            "type": "grafana-postgresql-datasource",
+            "type": "mysql",
             "uid": "${ds}"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT p.uns_path, p.unit, p.data_type, p.description, p.source_ref, s.last, s.min, s.max, s.avg, s.samples, s.good_pct FROM uns.points p LEFT JOIN LATERAL ( SELECT (array_agg(r.value ORDER BY r.time DESC))[1] AS last, min(r.value) AS min, max(r.value) AS max, avg(r.value) AS avg, count(*) AS samples, 100.0 * count(*) FILTER (WHERE r.quality & 192 = 192) / nullif(count(*), 0) AS good_pct FROM uns.readings r WHERE r.point_id = p.point_id AND $__timeFilter(r.time) ) s ON true WHERE p.point_id = ANY (ARRAY[${point:sqlstring}]::integer[]) ORDER BY p.uns_path"
+          "rawSql": "SELECT p.uns_path, p.unit, p.data_type, p.description, p.source_ref, (SELECT r2.value FROM uns.readings r2 WHERE r2.point_id = p.point_id AND $__timeFilter(r2.time) ORDER BY r2.time DESC LIMIT 1) AS last, s.min, s.max, s.avg, s.samples, s.good_pct FROM uns.points p LEFT JOIN ( SELECT r.point_id, MIN(r.value) AS min, MAX(r.value) AS max, AVG(r.value) AS avg, COUNT(*) AS samples, CAST(100.0 * COUNT(CASE WHEN r.quality & 192 = 192 THEN 1 END) / NULLIF(COUNT(*), 0) AS DOUBLE) AS good_pct FROM uns.readings r WHERE r.point_id IN (${point:sqlstring}) AND $__timeFilter(r.time) GROUP BY r.point_id ) s ON s.point_id = p.point_id WHERE p.point_id IN (${point:sqlstring}) ORDER BY p.uns_path"
         }
       ],
       "fieldConfig": {
@@ -346,7 +348,7 @@
       "title": "Raw samples (newest 500)",
       "description": "",
       "datasource": {
-        "type": "grafana-postgresql-datasource",
+        "type": "mysql",
         "uid": "${ds}"
       },
       "gridPos": {
@@ -359,13 +361,13 @@
         {
           "refId": "A",
           "datasource": {
-            "type": "grafana-postgresql-datasource",
+            "type": "mysql",
             "uid": "${ds}"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT r.time, p.uns_path, r.value, r.quality, uns.quality_label(r.quality) AS quality_label FROM uns.readings r JOIN uns.points p USING (point_id) WHERE r.point_id = ANY (ARRAY[${point:sqlstring}]::integer[]) AND $__timeFilter(r.time) ORDER BY r.time DESC LIMIT 500"
+          "rawSql": "SELECT r.time, p.uns_path, r.value, r.quality, uns.quality_label(r.quality) AS quality_label FROM uns.readings r JOIN uns.points p USING (point_id) WHERE r.point_id IN (${point:sqlstring}) AND $__timeFilter(r.time) ORDER BY r.time DESC LIMIT 500"
         }
       ],
       "fieldConfig": {
