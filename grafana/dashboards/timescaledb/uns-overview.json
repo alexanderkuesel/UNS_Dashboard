@@ -1,10 +1,12 @@
 {
-  "uid": "uns-health",
-  "title": "UNS · Communication health",
-  "description": "Which points and devices stopped reporting, and how clean the data is.",
+  "uid": "uns-overview",
+  "title": "UNS · Enterprise overview",
+  "description": "Top of the ISA-95 model: sites, areas and their communication health.",
   "tags": [
     "uns",
-    "isa-95"
+    "isa-95",
+    "timescaledb",
+    "uns-timescaledb"
   ],
   "editable": true,
   "graphTooltip": 1,
@@ -43,8 +45,8 @@
           "type": "grafana-postgresql-datasource",
           "uid": "${ds}"
         },
-        "query": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE true ORDER BY 1",
-        "definition": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE true ORDER BY 1",
+        "query": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE TRUE ORDER BY 1",
+        "definition": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE TRUE ORDER BY 1",
         "refresh": 2,
         "multi": true,
         "includeAll": true,
@@ -88,39 +90,13 @@
         "regex": ""
       },
       {
-        "name": "area",
-        "label": "Area",
-        "type": "query",
-        "datasource": {
-          "type": "grafana-postgresql-datasource",
-          "uid": "${ds}"
-        },
-        "query": "SELECT DISTINCT p.area FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) ORDER BY 1",
-        "definition": "SELECT DISTINCT p.area FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) ORDER BY 1",
-        "refresh": 2,
-        "multi": true,
-        "includeAll": true,
-        "current": {
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
-        "options": [],
-        "sort": 1,
-        "hide": 0,
-        "regex": ""
-      },
-      {
         "name": "stale",
         "label": "Stale after",
         "type": "custom",
-        "query": "5m : 5 minutes,15m : 15 minutes,1h : 1 hour,6h : 6 hours,1d : 1 day",
+        "query": "5m : 300,15m : 900,1h : 3600,6h : 21600,1d : 86400",
         "current": {
           "text": "15m",
-          "value": "15 minutes"
+          "value": "900"
         },
         "multi": false,
         "includeAll": false,
@@ -150,7 +126,7 @@
       "title": "UNS",
       "type": "dashboards",
       "tags": [
-        "uns"
+        "uns-timescaledb"
       ],
       "asDropdown": false,
       "includeVars": false,
@@ -164,8 +140,8 @@
   "panels": [
     {
       "type": "stat",
-      "title": "Point states",
-      "description": "ok: reported within the stale window · stale: silent longer · never: registered but no sample yet · disabled: storage switched off in the registry.",
+      "title": "Model",
+      "description": "Size of the selected part of the ISA-95 equipment model.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "${ds}"
@@ -173,7 +149,7 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 24,
+        "w": 12,
         "h": 4
       },
       "targets": [
@@ -186,23 +162,110 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT count(*) FILTER (WHERE p.state = 'ok') AS \"OK\", count(*) FILTER (WHERE p.state = 'stale') AS \"Stale\", count(*) FILTER (WHERE p.state = 'never') AS \"Never seen\", count(*) FILTER (WHERE p.state = 'disabled') AS \"Disabled\" FROM uns.point_health(${stale:sqlstring}) p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area)"
+          "rawSql": "SELECT count(DISTINCT p.site) AS \"Sites\", count(DISTINCT (p.site, p.area)) AS \"Areas\", count(DISTINCT (p.site, p.area, p.line, p.device)) AS \"Devices\", count(*) FILTER (WHERE p.enabled) AS \"Points\" FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)"
         }
       ],
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Communication",
+      "description": "Share of enabled points that reported within the stale window, and the share of non-good OPC quality samples in the time range.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round((100.0 * count(*) FILTER (WHERE p.state = 'ok') / NULLIF(count(*) FILTER (WHERE p.state <> 'disabled'), 0))::numeric, 1) AS \"Reporting\", count(*) FILTER (WHERE p.state = 'stale') AS \"Stale\", count(*) FILTER (WHERE p.state = 'never') AS \"Never seen\", (SELECT round((100.0 * count(*) FILTER (WHERE r.quality & 192 <> 192) / NULLIF(COUNT(*), 0))::numeric, 2) FROM uns.readings r WHERE r.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)) AND $__timeFilter(r.time)) AS \"Bad quality\" FROM uns.point_health(${stale} * interval '1 second') p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "OK"
+              "options": "Reporting"
             },
             "properties": [
               {
-                "id": "color",
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "green"
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "red"
+                    },
+                    {
+                      "value": 80,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 99,
+                      "color": "green"
+                    }
+                  ]
                 }
               }
             ]
@@ -210,44 +273,35 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Stale"
+              "options": "Bad quality"
             },
             "properties": [
               {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "orange"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Never seen"
-            },
-            "properties": [
+                "id": "unit",
+                "value": "percent"
+              },
               {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "red"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Disabled"
-            },
-            "properties": [
+                "id": "decimals",
+                "value": 2
+              },
               {
-                "id": "color",
+                "id": "thresholds",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "text"
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "green"
+                    },
+                    {
+                      "value": 0.5,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 5,
+                      "color": "red"
+                    }
+                  ]
                 }
               }
             ]
@@ -269,12 +323,12 @@
         "orientation": "auto",
         "wideLayout": true
       },
-      "id": 1
+      "id": 2
     },
     {
-      "type": "bargauge",
-      "title": "Silence per device",
-      "description": "Time since the device's newest sample. Thresholds follow common MQTT publish rates.",
+      "type": "nodeGraph",
+      "title": "Equipment hierarchy",
+      "description": "Enterprise > site > area > line > device. Node is green when the node's newest sample is younger than the stale window.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "${ds}"
@@ -282,12 +336,12 @@
       "gridPos": {
         "x": 0,
         "y": 4,
-        "w": 9,
+        "w": 14,
         "h": 14
       },
       "targets": [
         {
-          "refId": "A",
+          "refId": "nodes",
           "datasource": {
             "type": "grafana-postgresql-datasource",
             "uid": "${ds}"
@@ -295,64 +349,44 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT p.site || '/' || p.area || '/' || p.device AS device, min(p.age_s) AS silent FROM uns.point_health(${stale:sqlstring}) p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.enabled AND p.age_s IS NOT NULL GROUP BY 1 ORDER BY 2 DESC"
+          "rawSql": "SELECT h.path AS id, h.name AS title, h.level || ' · ' || h.points || ' points' AS subtitle, h.points || ' pts' AS mainstat, h.level AS \"detail__Level\", to_char(h.last_seen, 'YYYY-MM-DD HH24:MI:SS') AS \"detail__Last seen\", CASE WHEN h.last_seen > now() - ${stale} * interval '1 second' THEN 'rgb(115, 191, 105)' ELSE 'rgb(242, 73, 92)' END AS color FROM uns.hierarchy h WHERE h.point_ids && ARRAY(SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site))"
+        },
+        {
+          "refId": "edges",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT h.parent_path || '->' || h.path AS id, h.parent_path AS source, h.path AS target FROM uns.hierarchy h WHERE h.parent_path IS NOT NULL AND h.point_ids && ARRAY(SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site))"
         }
       ],
       "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "color": {
-            "mode": "thresholds"
-          },
-          "displayName": "${__data.fields.device}",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": null,
-                "color": "green"
-              },
-              {
-                "value": 900,
-                "color": "orange"
-              },
-              {
-                "value": 86400,
-                "color": "red"
-              }
-            ]
-          }
-        },
+        "defaults": {},
         "overrides": []
       },
       "options": {
-        "reduceOptions": {
-          "calcs": [],
-          "fields": "",
-          "values": true
-        },
-        "displayMode": "lcd",
-        "orientation": "horizontal",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "namePlacement": "left",
-        "sizing": "auto"
+        "nodes": {},
+        "edges": {},
+        "layoutAlgorithm": "layered",
+        "zoomMode": "cooperative"
       },
-      "id": 2
+      "id": 3
     },
     {
       "type": "table",
-      "title": "Points needing attention",
-      "description": "Problems first. Click a path to trend it.",
+      "title": "Areas",
+      "description": "Click an area to open it in the Equipment dashboard.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "${ds}"
       },
       "gridPos": {
-        "x": 9,
+        "x": 14,
         "y": 4,
-        "w": 15,
+        "w": 10,
         "h": 14
       },
       "targets": [
@@ -365,7 +399,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT p.state, p.uns_path, p.source_ref, p.age_s AS last_seen, p.last_seen AS last_seen_at, p.point_id FROM uns.point_health(${stale:sqlstring}) p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) ORDER BY CASE p.state WHEN 'never' THEN 0 WHEN 'stale' THEN 1 WHEN 'ok' THEN 2 ELSE 3 END, p.age_s DESC NULLS FIRST"
+          "rawSql": "SELECT p.enterprise, p.site, p.area, COUNT(DISTINCT p.device) AS devices, count(*) FILTER (WHERE p.state = 'ok') AS ok, count(*) FILTER (WHERE p.state IN ('stale', 'never')) AS problems, MIN(p.age_s) AS last_seen FROM uns.point_health(${stale} * interval '1 second') p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) GROUP BY 1, 2, 3 ORDER BY 1, 2, 3"
         }
       ],
       "fieldConfig": {
@@ -374,7 +408,24 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "state"
+              "options": "area"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open ${__data.fields.area}",
+                    "url": "/d/uns-equipment/uns-equipment?${ds:queryparam}&${__url_time_range}&var-enterprise=${__data.fields.enterprise}&var-site=${__data.fields.site}&var-area=${__data.fields.area}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "problems"
             },
             "properties": [
               {
@@ -385,67 +436,30 @@
                 }
               },
               {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "ok": {
-                        "color": "green",
-                        "index": 0
-                      },
-                      "stale": {
-                        "color": "orange",
-                        "index": 1
-                      },
-                      "never": {
-                        "color": "red",
-                        "index": 2
-                      },
-                      "disabled": {
-                        "color": "text",
-                        "index": 3
-                      },
-                      "good": {
-                        "color": "green",
-                        "index": 4
-                      },
-                      "uncertain": {
-                        "color": "orange",
-                        "index": 5
-                      },
-                      "bad": {
-                        "color": "red",
-                        "index": 6
-                      }
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "transparent"
+                    },
+                    {
+                      "value": 1,
+                      "color": "red"
                     }
-                  }
-                ]
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
               },
               {
                 "id": "custom.width",
-                "value": 90
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "uns_path"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "Trend ${__data.fields.uns_path}",
-                    "url": "/d/uns-trend/uns-point-trend?${ds:queryparam}&${__url_time_range}&var-point=${__data.fields.point_id}"
-                  }
-                ]
-              },
-              {
-                "id": "custom.minWidth",
-                "value": 320
+                "value": 85
               }
             ]
           },
@@ -504,12 +518,48 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "point_id"
+              "options": "enterprise"
             },
             "properties": [
               {
                 "id": "custom.hidden",
                 "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "site"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "devices"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 75
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ok"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 55
               }
             ]
           }
@@ -519,12 +569,12 @@
         "showHeader": true,
         "cellHeight": "sm"
       },
-      "id": 3
+      "id": 4
     },
     {
       "type": "timeseries",
-      "title": "Non-good quality samples",
-      "description": "Samples whose OPC quality is bad or uncertain (quality & 192 <> 192), from raw readings.",
+      "title": "Samples by site",
+      "description": "Stored samples per time bucket: a drop means a site stopped publishing.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "${ds}"
@@ -545,7 +595,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT $__timeGroupAlias(r.time, $__interval), p.device AS metric, count(*) FILTER (WHERE r.quality & 192 <> 192) AS value FROM uns.readings r JOIN uns.points p USING (point_id) WHERE r.point_id = ANY (ARRAY(SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area))) AND $__timeFilter(r.time) GROUP BY 1, 2 ORDER BY 1"
+          "rawSql": "SELECT t.time, p.site AS metric, SUM(t.samples) AS value FROM uns.trend(ARRAY(SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)), $__timeFrom(), $__timeTo(), $__interval_ms * interval '1 millisecond') t JOIN uns.points p USING (point_id) GROUP BY 1, 2 ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -553,7 +603,7 @@
           "custom": {
             "drawStyle": "bars",
             "lineWidth": 1,
-            "fillOpacity": 70,
+            "fillOpacity": 60,
             "showPoints": "never",
             "spanNulls": false,
             "gradientMode": "opacity",
@@ -563,8 +613,7 @@
           },
           "color": {
             "mode": "palette-classic"
-          },
-          "decimals": 0
+          }
         },
         "overrides": []
       },
@@ -579,11 +628,11 @@
           "sort": "desc"
         }
       },
-      "id": 4
+      "id": 5
     },
     {
       "type": "timeseries",
-      "title": "Reporting points by area",
+      "title": "Reporting points by site",
       "description": "Distinct points with at least one sample per bucket.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
@@ -605,7 +654,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT t.time, p.site || '/' || p.area AS metric, count(DISTINCT t.point_id) AS value FROM uns.trend(ARRAY(SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area)), $__timeFrom(), $__timeTo(), $__interval_ms * interval '1 millisecond') t JOIN uns.points p USING (point_id) GROUP BY 1, 2 ORDER BY 1"
+          "rawSql": "SELECT t.time, p.site AS metric, COUNT(DISTINCT t.point_id) AS value FROM uns.trend(ARRAY(SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)), $__timeFrom(), $__timeTo(), $__interval_ms * interval '1 millisecond') t JOIN uns.points p USING (point_id) GROUP BY 1, 2 ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -637,7 +686,7 @@
           "sort": "desc"
         }
       },
-      "id": 5
+      "id": 6
     }
   ]
 }

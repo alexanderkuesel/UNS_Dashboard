@@ -1,12 +1,23 @@
+# One folder per historian engine; edit tools/build_dashboards.py, not the UI.
 apiVersion: 1
 
 providers:
-  - name: uns
-    folder: UNS
-    folderUid: uns
+  - name: uns-timescaledb
+    folder: UNS · TimescaleDB
+    folderUid: uns-timescaledb
     type: file
     disableDeletion: true
-    allowUiUpdates: false   # edit tools/build_dashboards.py, not the UI
+    allowUiUpdates: false
     updateIntervalSeconds: 30
     options:
-      path: /var/lib/grafana/dashboards/uns
+      path: /var/lib/grafana/dashboards/uns/timescaledb
+
+  - name: uns-mariadb
+    folder: UNS · MariaDB
+    folderUid: uns-mariadb
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/uns/mariadb

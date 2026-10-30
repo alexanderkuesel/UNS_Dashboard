@@ -1,0 +1,692 @@
+{
+  "uid": "uns-overview-mariadb",
+  "title": "UNS · Enterprise overview (MariaDB)",
+  "description": "Top of the ISA-95 model: sites, areas and their communication health.",
+  "tags": [
+    "uns",
+    "isa-95",
+    "mariadb",
+    "uns-mariadb"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 41,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "mysql",
+        "current": {
+          "text": "UNS Historian (MariaDB)",
+          "value": "uns-historian-mariadb"
+        },
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "options": []
+      },
+      {
+        "name": "enterprise",
+        "label": "Enterprise",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE TRUE ORDER BY 1",
+        "definition": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE TRUE ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "site",
+        "label": "Site",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.site FROM uns.points p WHERE p.enterprise IN ($enterprise) ORDER BY 1",
+        "definition": "SELECT DISTINCT p.site FROM uns.points p WHERE p.enterprise IN ($enterprise) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "stale",
+        "label": "Stale after",
+        "type": "custom",
+        "query": "5m : 300,15m : 900,1h : 3600,6h : 21600,1d : 86400",
+        "current": {
+          "text": "15m",
+          "value": "900"
+        },
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "UNS",
+      "type": "dashboards",
+      "tags": [
+        "uns-mariadb"
+      ],
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link",
+      "tooltip": "",
+      "url": ""
+    }
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Model",
+      "description": "Size of the selected part of the ISA-95 equipment model.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(DISTINCT p.site) AS `Sites`, COUNT(DISTINCT p.site, p.area) AS `Areas`, COUNT(DISTINCT p.site, p.area, p.line, p.device) AS `Devices`, COUNT(CASE WHEN p.enabled THEN 1 END) AS `Points` FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Communication",
+      "description": "Share of enabled points that reported within the stale window, and the share of non-good OPC quality samples in the time range.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CAST(ROUND(100.0 * COUNT(CASE WHEN p.state = 'ok' THEN 1 END) / NULLIF(COUNT(CASE WHEN p.state <> 'disabled' THEN 1 END), 0), 1) AS DOUBLE) AS `Reporting`, COUNT(CASE WHEN p.state = 'stale' THEN 1 END) AS `Stale`, COUNT(CASE WHEN p.state = 'never' THEN 1 END) AS `Never seen`, (SELECT CAST(ROUND(100.0 * COUNT(CASE WHEN r.quality & 192 <> 192 THEN 1 END) / NULLIF(COUNT(*), 0), 2) AS DOUBLE) FROM uns.readings r WHERE r.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)) AND $__timeFilter(r.time)) AS `Bad quality` FROM (SELECT s.*, CASE WHEN NOT s.enabled THEN 'disabled' WHEN s.last_seen IS NULL THEN 'never' WHEN s.age_s > ${stale} THEN 'stale' ELSE 'ok' END AS state FROM uns.point_status s) p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Reporting"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "red"
+                    },
+                    {
+                      "value": 80,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 99,
+                      "color": "green"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Bad quality"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "green"
+                    },
+                    {
+                      "value": 0.5,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 5,
+                      "color": "red"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "id": 2
+    },
+    {
+      "type": "nodeGraph",
+      "title": "Equipment hierarchy",
+      "description": "Enterprise > site > area > line > device. Node is green when the node's newest sample is younger than the stale window.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 14,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "nodes",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT h.path AS id, MAX(h.name) AS title, CONCAT(MAX(h.level), ' · ', COUNT(*), ' points') AS subtitle, CONCAT(COUNT(*), ' pts') AS mainstat, MAX(h.level) AS `detail__Level`, DATE_FORMAT(MAX(h.last_seen), '%Y-%m-%d %H:%i:%s') AS `detail__Last seen`, CASE WHEN MAX(h.last_seen) > UTC_TIMESTAMP() - INTERVAL ${stale} SECOND THEN 'rgb(115, 191, 105)' ELSE 'rgb(242, 73, 92)' END AS color FROM uns.hierarchy_points h WHERE h.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)) GROUP BY h.path"
+        },
+        {
+          "refId": "edges",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT CONCAT(h.parent_path, '->', h.path) AS id, h.parent_path AS source, h.path AS target FROM uns.hierarchy_points h WHERE h.parent_path IS NOT NULL AND h.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "nodes": {},
+        "edges": {},
+        "layoutAlgorithm": "layered",
+        "zoomMode": "cooperative"
+      },
+      "id": 3
+    },
+    {
+      "type": "table",
+      "title": "Areas",
+      "description": "Click an area to open it in the Equipment dashboard.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 4,
+        "w": 10,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT p.enterprise, p.site, p.area, COUNT(DISTINCT p.device) AS devices, COUNT(CASE WHEN p.state = 'ok' THEN 1 END) AS ok, COUNT(CASE WHEN p.state IN ('stale', 'never') THEN 1 END) AS problems, MIN(p.age_s) AS last_seen FROM (SELECT s.*, CASE WHEN NOT s.enabled THEN 'disabled' WHEN s.last_seen IS NULL THEN 'never' WHEN s.age_s > ${stale} THEN 'stale' ELSE 'ok' END AS state FROM uns.point_status s) p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) GROUP BY 1, 2, 3 ORDER BY 1, 2, 3"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "area"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open ${__data.fields.area}",
+                    "url": "/d/uns-equipment-mariadb/uns-equipment?${ds:queryparam}&${__url_time_range}&var-enterprise=${__data.fields.enterprise}&var-site=${__data.fields.site}&var-area=${__data.fields.area}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "problems"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "transparent"
+                    },
+                    {
+                      "value": 1,
+                      "color": "red"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 85
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_seen"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "displayName",
+                "value": "last seen (s ago)"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "green"
+                    },
+                    {
+                      "value": 900,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 86400,
+                      "color": "red"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "enterprise"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "site"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "devices"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 75
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ok"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 55
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "id": 4
+    },
+    {
+      "type": "timeseries",
+      "title": "Samples by site",
+      "description": "Stored samples per time bucket: a drop means a site stopped publishing.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT t.time, p.site AS metric, CAST(SUM(t.samples) AS DOUBLE) AS value FROM ( SELECT FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(r.time) / GREATEST(FLOOR($__interval_ms / 1000), 1)) * GREATEST(FLOOR($__interval_ms / 1000), 1)) AS time, r.point_id, AVG(r.value) AS avg, MIN(r.value) AS min, MAX(r.value) AS max, COUNT(*) AS samples FROM uns.readings r WHERE NOT ($__interval_ms >= 3600000 OR $__unixEpochTo() - $__unixEpochFrom() >= 604800) AND r.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)) AND $__timeFilter(r.time) GROUP BY 1, 2 UNION ALL SELECT FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(h.time) / GREATEST(FLOOR($__interval_ms / 1000), 3600)) * GREATEST(FLOOR($__interval_ms / 1000), 3600)), h.point_id, SUM(h.avg * h.samples) / NULLIF(SUM(h.samples), 0), MIN(h.min), MAX(h.max), CAST(SUM(h.samples) AS INTEGER) FROM uns.readings_1h h WHERE ($__interval_ms >= 3600000 OR $__unixEpochTo() - $__unixEpochFrom() >= 604800) AND h.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)) AND h.time >= FROM_UNIXTIME(FLOOR($__unixEpochFrom() / 3600) * 3600) AND h.time < $__timeTo() GROUP BY 1, 2) t JOIN uns.points p USING (point_id) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": false,
+            "gradientMode": "opacity",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5
+    },
+    {
+      "type": "timeseries",
+      "title": "Reporting points by site",
+      "description": "Distinct points with at least one sample per bucket.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT t.time, p.site AS metric, COUNT(DISTINCT t.point_id) AS value FROM ( SELECT FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(r.time) / GREATEST(FLOOR($__interval_ms / 1000), 1)) * GREATEST(FLOOR($__interval_ms / 1000), 1)) AS time, r.point_id, AVG(r.value) AS avg, MIN(r.value) AS min, MAX(r.value) AS max, COUNT(*) AS samples FROM uns.readings r WHERE NOT ($__interval_ms >= 3600000 OR $__unixEpochTo() - $__unixEpochFrom() >= 604800) AND r.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)) AND $__timeFilter(r.time) GROUP BY 1, 2 UNION ALL SELECT FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(h.time) / GREATEST(FLOOR($__interval_ms / 1000), 3600)) * GREATEST(FLOOR($__interval_ms / 1000), 3600)), h.point_id, SUM(h.avg * h.samples) / NULLIF(SUM(h.samples), 0), MIN(h.min), MAX(h.max), CAST(SUM(h.samples) AS INTEGER) FROM uns.readings_1h h WHERE ($__interval_ms >= 3600000 OR $__unixEpochTo() - $__unixEpochFrom() >= 604800) AND h.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site)) AND h.time >= FROM_UNIXTIME(FLOOR($__unixEpochFrom() / 3600) * 3600) AND h.time < $__timeTo() GROUP BY 1, 2) t JOIN uns.points p USING (point_id) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "gradientMode": "opacity",
+            "lineInterpolation": "stepAfter"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 6
+    }
+  ]
+}

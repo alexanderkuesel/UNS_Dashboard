@@ -1,0 +1,645 @@
+{
+  "uid": "uns-health-mariadb",
+  "title": "UNS · Communication health (MariaDB)",
+  "description": "Which points and devices stopped reporting, and how clean the data is.",
+  "tags": [
+    "uns",
+    "isa-95",
+    "mariadb",
+    "uns-mariadb"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 41,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "mysql",
+        "current": {
+          "text": "UNS Historian (MariaDB)",
+          "value": "uns-historian-mariadb"
+        },
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "options": []
+      },
+      {
+        "name": "enterprise",
+        "label": "Enterprise",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE TRUE ORDER BY 1",
+        "definition": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE TRUE ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "site",
+        "label": "Site",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.site FROM uns.points p WHERE p.enterprise IN ($enterprise) ORDER BY 1",
+        "definition": "SELECT DISTINCT p.site FROM uns.points p WHERE p.enterprise IN ($enterprise) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "area",
+        "label": "Area",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.area FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) ORDER BY 1",
+        "definition": "SELECT DISTINCT p.area FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "stale",
+        "label": "Stale after",
+        "type": "custom",
+        "query": "5m : 300,15m : 900,1h : 3600,6h : 21600,1d : 86400",
+        "current": {
+          "text": "15m",
+          "value": "900"
+        },
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "UNS",
+      "type": "dashboards",
+      "tags": [
+        "uns-mariadb"
+      ],
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link",
+      "tooltip": "",
+      "url": ""
+    }
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Point states",
+      "description": "ok: reported within the stale window · stale: silent longer · never: registered but no sample yet · disabled: storage switched off in the registry.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(CASE WHEN p.state = 'ok' THEN 1 END) AS `OK`, COUNT(CASE WHEN p.state = 'stale' THEN 1 END) AS `Stale`, COUNT(CASE WHEN p.state = 'never' THEN 1 END) AS `Never seen`, COUNT(CASE WHEN p.state = 'disabled' THEN 1 END) AS `Disabled` FROM (SELECT s.*, CASE WHEN NOT s.enabled THEN 'disabled' WHEN s.last_seen IS NULL THEN 'never' WHEN s.age_s > ${stale} THEN 'stale' ELSE 'ok' END AS state FROM uns.point_status s) p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "OK"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Stale"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Never seen"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Disabled"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "id": 1
+    },
+    {
+      "type": "bargauge",
+      "title": "Silence per device",
+      "description": "Time since the device's newest sample. Thresholds follow common MQTT publish rates.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 9,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CONCAT(p.site, '/', p.area, '/', p.device) AS device, MIN(p.age_s) AS silent FROM (SELECT s.*, CASE WHEN NOT s.enabled THEN 'disabled' WHEN s.last_seen IS NULL THEN 'never' WHEN s.age_s > ${stale} THEN 'stale' ELSE 'ok' END AS state FROM uns.point_status s) p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.enabled AND p.age_s IS NOT NULL GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "displayName": "${__data.fields.device}",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 900,
+                "color": "orange"
+              },
+              {
+                "value": 86400,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "displayMode": "lcd",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "sizing": "auto"
+      },
+      "id": 2
+    },
+    {
+      "type": "table",
+      "title": "Points needing attention",
+      "description": "Problems first. Click a path to trend it.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 9,
+        "y": 4,
+        "w": 15,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT p.state, p.uns_path, p.source_ref, p.age_s AS last_seen, p.last_seen AS last_seen_at, p.point_id FROM (SELECT s.*, CASE WHEN NOT s.enabled THEN 'disabled' WHEN s.last_seen IS NULL THEN 'never' WHEN s.age_s > ${stale} THEN 'stale' ELSE 'ok' END AS state FROM uns.point_status s) p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) ORDER BY CASE p.state WHEN 'never' THEN 0 WHEN 'stale' THEN 1 WHEN 'ok' THEN 2 ELSE 3 END, (p.age_s IS NULL) DESC, p.age_s DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "stale": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "never": {
+                        "color": "red",
+                        "index": 2
+                      },
+                      "disabled": {
+                        "color": "text",
+                        "index": 3
+                      },
+                      "good": {
+                        "color": "green",
+                        "index": 4
+                      },
+                      "uncertain": {
+                        "color": "orange",
+                        "index": 5
+                      },
+                      "bad": {
+                        "color": "red",
+                        "index": 6
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "uns_path"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Trend ${__data.fields.uns_path}",
+                    "url": "/d/uns-trend-mariadb/uns-point-trend?${ds:queryparam}&${__url_time_range}&var-point=${__data.fields.point_id}"
+                  }
+                ]
+              },
+              {
+                "id": "custom.minWidth",
+                "value": 320
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_seen"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "displayName",
+                "value": "last seen (s ago)"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "green"
+                    },
+                    {
+                      "value": 900,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 86400,
+                      "color": "red"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "point_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "id": 3
+    },
+    {
+      "type": "timeseries",
+      "title": "Non-good quality samples",
+      "description": "Samples whose OPC quality is bad or uncertain (quality & 192 <> 192), from raw readings.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(r.time, $__interval), p.device AS metric, COUNT(CASE WHEN r.quality & 192 <> 192 THEN 1 END) AS value FROM uns.readings r JOIN uns.points p USING (point_id) WHERE r.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area)) AND $__timeFilter(r.time) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "spanNulls": false,
+            "gradientMode": "opacity",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 4
+    },
+    {
+      "type": "timeseries",
+      "title": "Reporting points by area",
+      "description": "Distinct points with at least one sample per bucket.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT t.time, CONCAT(p.site, '/', p.area) AS metric, COUNT(DISTINCT t.point_id) AS value FROM ( SELECT FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(r.time) / GREATEST(FLOOR($__interval_ms / 1000), 1)) * GREATEST(FLOOR($__interval_ms / 1000), 1)) AS time, r.point_id, AVG(r.value) AS avg, MIN(r.value) AS min, MAX(r.value) AS max, COUNT(*) AS samples FROM uns.readings r WHERE NOT ($__interval_ms >= 3600000 OR $__unixEpochTo() - $__unixEpochFrom() >= 604800) AND r.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area)) AND $__timeFilter(r.time) GROUP BY 1, 2 UNION ALL SELECT FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(h.time) / GREATEST(FLOOR($__interval_ms / 1000), 3600)) * GREATEST(FLOOR($__interval_ms / 1000), 3600)), h.point_id, SUM(h.avg * h.samples) / NULLIF(SUM(h.samples), 0), MIN(h.min), MAX(h.max), CAST(SUM(h.samples) AS INTEGER) FROM uns.readings_1h h WHERE ($__interval_ms >= 3600000 OR $__unixEpochTo() - $__unixEpochFrom() >= 604800) AND h.point_id IN (SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area)) AND h.time >= FROM_UNIXTIME(FLOOR($__unixEpochFrom() / 3600) * 3600) AND h.time < $__timeTo() GROUP BY 1, 2) t JOIN uns.points p USING (point_id) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "gradientMode": "opacity",
+            "lineInterpolation": "stepAfter"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 5
+    }
+  ]
+}

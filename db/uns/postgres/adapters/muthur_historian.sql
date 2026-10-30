@@ -11,7 +11,7 @@
 -- Keep the views thin (no casts on point_id/time) so the planner can
 -- push filters down to the hypertable indexes.
 --
--- Load order: adapter first, then db/uns/core.sql (see tools/install_uns.sh).
+-- Load order: adapter first, then db/uns/postgres/core.sql (see tools/install_uns.sh).
 -- =====================================================================
 
 CREATE SCHEMA IF NOT EXISTS uns;
