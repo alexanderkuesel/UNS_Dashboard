@@ -35,7 +35,8 @@ jobs:
                  -e 's/^UNS_MARIADB_PASSWORD=.*/UNS_MARIADB_PASSWORD=ci-grafana/' \
                  -e 's/^GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=ci-admin/' .env
           docker compose config -q
-          docker compose --profile demo up -d --wait --wait-timeout 400
+          # demo databases for the dashboards + the bundled (empty) MariaDB historian
+          docker compose --profile demo --profile mariadb up -d --wait --wait-timeout 400
 
       - name: Every TimescaleDB panel query runs as the read-only grafana role
         run: python3 tools/check_queries.py --engine timescaledb --require-rows
@@ -44,6 +45,18 @@ jobs:
         env:
           MARIADB: docker exec -i uns-demo-mariadb mariadb -u grafana -pci-grafana
         run: python3 tools/check_queries.py --engine mariadb --require-rows
+
+      - name: Bundled MariaDB historian set itself up (empty database)
+        env:
+          MARIADB: docker exec -i uns-mariadb mariadb -u grafana -pci-grafana
+        run: |
+          python3 tools/check_queries.py --engine mariadb
+          docker exec -i uns-mariadb mariadb -u nodered -pchange-me-nodered -e "
+            INSERT INTO historian.points (source_topic, field, enterprise, site, area, device, measurement)
+            VALUES ('ci/test', 'value', 'ci', 'site', 'area', 'dev', 'm');
+            INSERT INTO historian.readings (time, point_id, value)
+            SELECT UTC_TIMESTAMP(3), point_id, 42 FROM historian.points WHERE source_topic = 'ci/test';"
+          $MARIADB -N -e "SELECT uns_path, value FROM uns.latest" | tee /dev/stderr | grep -q "ci/site/area/dev/m/value"
 
       - name: Grafana provisioned the data sources and dashboards
         run: |
@@ -57,4 +70,4 @@ jobs:
 
       - name: Logs on failure
         if: failure()
-        run: docker compose --profile demo logs --tail 200
+        run: docker compose --profile demo --profile mariadb logs --tail 200

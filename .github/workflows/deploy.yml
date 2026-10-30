@@ -35,7 +35,7 @@ jobs:
       DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
       TIMESCALE_CONTAINER: ${{ vars.TIMESCALE_CONTAINER || 'timescaledb' }}
       PG_ADMIN_USER: ${{ vars.PG_ADMIN_USER || 'postgres' }}
-      MARIADB_CONTAINER: ${{ vars.MARIADB_CONTAINER || 'mariadb' }}
+      MARIADB_CONTAINER: ${{ vars.MARIADB_CONTAINER || 'uns-mariadb' }}
       UNS_ADAPTER: ${{ vars.UNS_ADAPTER || 'muthur_historian' }}
     steps:
       - name: Resolve deploy directory
@@ -67,9 +67,14 @@ jobs:
         if: inputs.install_uns == 'mariadb' || inputs.install_uns == 'both'
         working-directory: ${{ env.DEPLOY_DIR }}
         env:
-          # repository secret; passed to the client via MYSQL_PWD, never on the command line
+          # passed to the client via MYSQL_PWD, never on the command line; for an
+          # external MariaDB set the MARIADB_ROOT_PASSWORD repository secret
           MYSQL_PWD: ${{ secrets.MARIADB_ROOT_PASSWORD }}
         run: |
+          if [ -z "$MYSQL_PWD" ]; then   # bundled uns-mariadb: password lives in .env
+            MYSQL_PWD=$(grep -E '^MARIADB_ROOT_PASSWORD=' .env | cut -d= -f2- | sed 's/[[:space:]]*#.*//')
+            export MYSQL_PWD
+          fi
           ENGINE=mariadb ADAPTER="$UNS_ADAPTER" READER=grafana \
           MARIADB="docker exec -i -e MYSQL_PWD $MARIADB_CONTAINER mariadb -uroot" \
             tools/install_uns.sh

@@ -102,29 +102,88 @@ feed container on TimescaleDB and an `EVENT` on MariaDB. Remove it all with
 
 4. `docker compose up -d`, then open `http://<pi>:3000`.
 
-## Raspberry Pi setup: MariaDB
+## Raspberry Pi from scratch: MariaDB + Grafana
 
-1. **Create the historian** if you don't have it yet. This creates the `historian`
-   database, the rollup procedure and event, and the `nodered` / `grafana` users (change
-   their passwords in the file first):
-   ```bash
-   docker exec -i mariadb mariadb -uroot -p"$ROOT_PW" < db/source/muthur_historian_mariadb.sql
-   ```
-   Turn on the event scheduler so the hourly rollup stays current: add
-   `command: --event-scheduler=ON` to your MariaDB container, or `event_scheduler=ON` under
-   `[mysqld]` in `my.cnf`. Node-RED inserts into `historian.readings` with UTC timestamps,
-   exactly like the TimescaleDB edition.
+Starting from nothing but a clone of this repo. The repo's `docker-compose.yml` runs both
+Grafana and a MariaDB historian, and MariaDB sets itself up on first start: database,
+users, rollup event and dashboard views.
 
-2. **Install the uns layer** (views in a separate `uns` database; `historian` is untouched):
+1. **Check the Pi runs a 64-bit OS.** `uname -m` must print `aarch64`. The database images
+   have no 32-bit builds; if you see `armv7l`, reflash with *Raspberry Pi OS (64-bit)*.
+
+2. **Install Docker** (includes `docker compose`), then log out and back in:
    ```bash
-   ENGINE=mariadb MARIADB="docker exec -i mariadb mariadb -uroot -p$ROOT_PW" tools/install_uns.sh
+   curl -fsSL https://get.docker.com | sh
+   sudo usermod -aG docker $USER
    ```
 
-3. **Configure** `.env`: set `UNS_MARIADB_PASSWORD`, and `UNS_MARIADB_HOST` using the same
-   options as for TimescaleDB above. To make MariaDB the landing page, set
+3. **Create your settings file** in the repo folder:
+   ```bash
+   cd UNS_Dashboard
+   cp .env.example .env
+   nano .env
+   ```
+   Change these four passwords (letters and digits only, e.g. from `openssl rand -hex 16`):
+   `GRAFANA_ADMIN_PASSWORD`, `MARIADB_ROOT_PASSWORD`, `NODERED_MARIADB_PASSWORD`,
+   `UNS_MARIADB_PASSWORD`. To land on the MariaDB dashboards, set
    `GRAFANA_HOME_DASHBOARD=/var/lib/grafana/dashboards/uns/mariadb/uns-overview-mariadb.json`.
+   Leave everything else as it is.
 
-4. `docker compose up -d`.
+4. **Start it:**
+   ```bash
+   docker compose up -d --wait
+   ```
+   The first start takes a minute or two while the images download. `docker compose ps`
+   should show `uns-mariadb` and `uns-grafana` as *healthy*.
+
+5. **Open Grafana** at `http://<pi-address>:3000` and log in as `admin` with your password.
+   The dashboards are in the **UNS · MariaDB** folder. They stay empty until data arrives.
+   The *UNS · TimescaleDB* folder only works if you also run TimescaleDB, so ignore it.
+
+6. **Send data from Node-RED.** Use a MySQL node (e.g. `node-red-node-mysql`) with host
+   `<pi-address>`, port `3306`, user `nodered`, your `NODERED_MARIADB_PASSWORD`, and
+   database `historian`. Each signal is registered once as a *point* (topic + field + where
+   it sits in the hierarchy), then values reference it:
+   ```sql
+   -- register the point (or refresh last_seen if it already exists)
+   INSERT INTO points (source_topic, field, enterprise, site, area, line, device, measurement, unit, last_seen)
+   VALUES ('home/kitchen/sensor1', 'temperature', 'home', 'house', 'kitchen', NULL, 'sensor1', 'climate', '°C',
+           UTC_TIMESTAMP(3))
+   ON DUPLICATE KEY UPDATE last_seen = UTC_TIMESTAMP(3);
+
+   -- store a value (always UTC time)
+   INSERT IGNORE INTO readings (time, point_id, value, quality)
+   SELECT UTC_TIMESTAMP(3), point_id, 21.5, 192
+   FROM points WHERE source_topic = 'home/kitchen/sensor1' AND field = 'temperature' AND enabled;
+   ```
+   The hierarchy columns are yours to edit later; the dashboards follow them.
+
+Day-to-day:
+
+| Task | Command |
+|---|---|
+| Update after `git pull` | `docker compose up -d --wait` |
+| Refresh the dashboard views after an update | `docker compose exec mariadb sh -c 'ENGINE=mariadb MARIADB="mariadb -uroot -p$MARIADB_ROOT_PASSWORD" /uns/tools/install_uns.sh'` |
+| SQL shell | `docker compose exec mariadb sh -c 'mariadb -uroot -p$MARIADB_ROOT_PASSWORD historian'` |
+| Backup | `docker compose exec mariadb sh -c 'mariadb-dump -uroot -p$MARIADB_ROOT_PASSWORD --single-transaction --routines --events historian' \| gzip > historian.sql.gz` |
+| Logs | `docker compose logs -f mariadb` |
+
+Data lives in the Docker volume `<repo-folder>_mariadb-data` (e.g. `uns_dashboard_mariadb-data`). It survives restarts and
+updates; only `docker compose down -v` deletes it. Passwords in `.env` are applied on the
+**first** start only. After that, change them with `ALTER USER` in the SQL shell.
+
+### Using a MariaDB you already run
+
+Remove `COMPOSE_PROFILES=mariadb` from `.env` and point `UNS_MARIADB_HOST` at your server,
+using the same options as for TimescaleDB above. Then load the schema and views once:
+
+```bash
+docker exec -i <container> mariadb -uroot -p<pw> < db/source/muthur_historian_mariadb.sql
+ENGINE=mariadb MARIADB="docker exec -i <container> mariadb -uroot -p<pw>" tools/install_uns.sh
+```
+
+The server needs `event_scheduler=ON` (keeps the hourly rollup current), and Node-RED
+must write UTC timestamps.
 
 All images are multi-arch (arm64), and Grafana uses about 100–150 MB of RAM.
 
@@ -149,8 +208,9 @@ Runner setup on the Pi:
 3. Create `~/uns-dashboard/.env` once (step 3 above). Deploys never overwrite it.
 4. Optional repository **variables**: `DEPLOY_DIR`, `TIMESCALE_CONTAINER` (default
    `timescaledb`), `PG_ADMIN_USER` (default `postgres`), `MARIADB_CONTAINER` (default
-   `mariadb`), `UNS_ADAPTER`. For the MariaDB install option, add the repository **secret**
-   `MARIADB_ROOT_PASSWORD`.
+   `uns-mariadb`, the bundled one), `UNS_ADAPTER`. For the MariaDB install option on an
+   external server, add the repository **secret** `MARIADB_ROOT_PASSWORD`; the bundled one
+   reads it from `.env`.
 
 > Security: a self-hosted runner executes workflow code on your Pi. Only `deploy.yml`
 > targets it, and only for `main` or manual runs. If the repo is public, also set
@@ -196,7 +256,8 @@ source treats `#` as a comment even inside string literals, which cuts the query
 db/source/muthur_historian_*.sql    historian schema, TimescaleDB + MariaDB editions
 db/uns/<engine>/adapters/*.sql      source schema → uns contract
 db/uns/<engine>/core.sql            schema-independent helpers used by the dashboards
-db/demo/                            demo data + init hooks for the demo databases
+db/init/                            first-start hook for the bundled MariaDB
+db/demo/                            demo data + init hook for the demo TimescaleDB
 grafana/provisioning/               data sources + dashboard providers (one folder per engine)
 grafana/dashboards/<engine>/*.json  generated dashboards
 tools/install_uns.sh                install/refresh the uns layer
