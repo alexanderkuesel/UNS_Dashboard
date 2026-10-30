@@ -1,0 +1,774 @@
+{
+  "uid": "uns-equipment",
+  "title": "UNS · Equipment",
+  "description": "Drill down the ISA-95 hierarchy to areas, lines and devices: live values, trends and states.",
+  "tags": [
+    "uns",
+    "isa-95"
+  ],
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 41,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "grafana-postgresql-datasource",
+        "current": {
+          "text": "UNS Historian",
+          "value": "uns-historian"
+        },
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "options": []
+      },
+      {
+        "name": "enterprise",
+        "label": "Enterprise",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE true ORDER BY 1",
+        "definition": "SELECT DISTINCT p.enterprise FROM uns.points p WHERE true ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "site",
+        "label": "Site",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.site FROM uns.points p WHERE p.enterprise IN ($enterprise) ORDER BY 1",
+        "definition": "SELECT DISTINCT p.site FROM uns.points p WHERE p.enterprise IN ($enterprise) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "area",
+        "label": "Area",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.area FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) ORDER BY 1",
+        "definition": "SELECT DISTINCT p.area FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "line",
+        "label": "Line",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.line FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) ORDER BY 1",
+        "definition": "SELECT DISTINCT p.line FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "device",
+        "label": "Device",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.device FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) ORDER BY 1",
+        "definition": "SELECT DISTINCT p.device FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "measurement",
+        "label": "Measurement",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.measurement FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) ORDER BY 1",
+        "definition": "SELECT DISTINCT p.measurement FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 0,
+        "regex": ""
+      },
+      {
+        "name": "fmeas",
+        "label": "Float measurements",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${ds}"
+        },
+        "query": "SELECT DISTINCT p.measurement FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) AND p.measurement IN ($measurement) AND p.data_type <> 'bool' AND p.last_seen IS NOT NULL ORDER BY 1",
+        "definition": "SELECT DISTINCT p.measurement FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) AND p.measurement IN ($measurement) AND p.data_type <> 'bool' AND p.last_seen IS NOT NULL ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "sort": 1,
+        "hide": 2,
+        "regex": ""
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "UNS",
+      "type": "dashboards",
+      "tags": [
+        "uns"
+      ],
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "icon": "external link",
+      "tooltip": "",
+      "url": ""
+    }
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Live values",
+      "description": "Latest stored value per analog point.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT p.device || ' · ' || p.field || coalesce(' [' || p.unit || ']', '') AS name, p.value FROM uns.latest p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) AND p.measurement IN ($measurement) AND p.data_type <> 'bool' AND p.enabled ORDER BY p.uns_path"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "decimals": 1,
+          "displayName": "${__data.fields.name}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true
+      },
+      "id": 1
+    },
+    {
+      "type": "row",
+      "title": "Trends by measurement",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "id": 2
+    },
+    {
+      "type": "timeseries",
+      "title": "$fmeas",
+      "description": "Bucketed average. Long ranges read the hourly rollup automatically.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT t.time, p.device || ' · ' || p.field || coalesce(' [' || p.unit || ']', '') AS metric, t.avg AS value FROM uns.trend(ARRAY(SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) AND p.measurement IN ($measurement) AND p.measurement IN (${fmeas:sqlstring}) AND p.data_type <> 'bool'), $__timeFrom(), $__timeTo(), $__interval_ms * interval '1 millisecond') t JOIN uns.points p USING (point_id) ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false,
+            "gradientMode": "opacity"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "repeat": "fmeas",
+      "repeatDirection": "h",
+      "maxPerRow": 2,
+      "id": 3
+    },
+    {
+      "type": "row",
+      "title": "States",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "id": 4
+    },
+    {
+      "type": "state-timeline",
+      "title": "Discrete states",
+      "description": "Boolean points (data_type = bool). A bucket shows ON if the signal was on at any time in it.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT t.time, p.device || ' · ' || p.field AS metric, t.max AS value FROM uns.trend(ARRAY(SELECT p.point_id FROM uns.points p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) AND p.measurement IN ($measurement) AND p.data_type = 'bool'), $__timeFrom(), $__timeTo(), $__interval_ms * interval '1 millisecond') t JOIN uns.points p USING (point_id) ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              },
+              {
+                "value": 0.5,
+                "color": "green"
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OFF",
+                  "color": "#3d3d48",
+                  "index": 0
+                },
+                "1": {
+                  "text": "ON",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "left",
+        "rowHeight": 0.85,
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "id": 5
+    },
+    {
+      "type": "row",
+      "title": "Points",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "id": 6
+    },
+    {
+      "type": "table",
+      "title": "Point list",
+      "description": "Click a UNS path to trend it.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 16,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT p.point_id, p.uns_path, CASE WHEN p.data_type = 'bool' THEN CASE WHEN p.value > 0.5 THEN 'ON' ELSE 'OFF' END ELSE round(p.value::numeric, 2)::text END AS value, p.unit, extract(epoch FROM now() - p.value_time) AS last_seen, uns.quality_label(p.quality) AS quality, p.enabled FROM uns.latest p WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) AND p.measurement IN ($measurement) ORDER BY p.uns_path"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "uns_path"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Trend ${__data.fields.uns_path}",
+                    "url": "/d/uns-trend/uns-point-trend?${ds:queryparam}&${__url_time_range}&var-point=${__data.fields.point_id}"
+                  }
+                ]
+              },
+              {
+                "id": "custom.minWidth",
+                "value": 320
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_seen"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "displayName",
+                "value": "last seen (s ago)"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "value": null,
+                      "color": "green"
+                    },
+                    {
+                      "value": 900,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 86400,
+                      "color": "red"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "quality"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "stale": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "never": {
+                        "color": "red",
+                        "index": 2
+                      },
+                      "disabled": {
+                        "color": "text",
+                        "index": 3
+                      },
+                      "good": {
+                        "color": "green",
+                        "index": 4
+                      },
+                      "uncertain": {
+                        "color": "orange",
+                        "index": 5
+                      },
+                      "bad": {
+                        "color": "red",
+                        "index": 6
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "point_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "value"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "right"
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unit"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 60
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_seen"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "quality"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "enabled"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "id": 7
+    },
+    {
+      "type": "table",
+      "title": "Asset attributes",
+      "description": "String attributes captured from device payloads (firmware, IP, model...).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 26,
+        "w": 8,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT p.device, a.key, a.value FROM uns.points p, jsonb_each_text(p.attributes) a WHERE p.enterprise IN ($enterprise) AND p.site IN ($site) AND p.area IN ($area) AND p.line IN ($line) AND p.device IN ($device) AND p.measurement IN ($measurement) ORDER BY 1, 2"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "key",
+            "rowField": "device",
+            "valueField": "value",
+            "emptyValue": "empty"
+          }
+        }
+      ],
+      "id": 8
+    }
+  ]
+}

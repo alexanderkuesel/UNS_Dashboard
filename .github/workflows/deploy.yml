@@ -1,0 +1,72 @@
+name: deploy
+
+# Runs on the Raspberry Pi's self-hosted runner (labels: self-hosted, linux, ARM64).
+# Copies the repo to DEPLOY_DIR and (re)starts Grafana with docker compose.
+# The .env with passwords lives only on the Pi, in DEPLOY_DIR.
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      install_uns:
+        description: "Re-install the uns schema (views/functions) in the historian database"
+        type: boolean
+        default: false
+      demo:
+        description: "Also run the demo database + feed (docker compose --profile demo)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-pi
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # only after a green CI run on main (or a manual run)
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, linux, ARM64]
+    timeout-minutes: 15
+    env:
+      DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+      TIMESCALE_CONTAINER: ${{ vars.TIMESCALE_CONTAINER || 'timescaledb' }}
+      PG_ADMIN_USER: ${{ vars.PG_ADMIN_USER || 'postgres' }}
+      UNS_ADAPTER: ${{ vars.UNS_ADAPTER || 'muthur_historian' }}
+    steps:
+      - name: Resolve deploy directory
+        run: echo "DEPLOY_DIR=${DEPLOY_DIR:-$HOME/uns-dashboard}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Sync files to the deploy directory
+        run: |
+          mkdir -p "$DEPLOY_DIR"
+          rsync -a --delete --exclude .git --exclude .env --exclude compose.override.yml ./ "$DEPLOY_DIR/"
+          if [ ! -f "$DEPLOY_DIR/.env" ]; then
+            echo "::error::$DEPLOY_DIR/.env is missing. Create it once from .env.example on the Pi."
+            exit 1
+          fi
+
+      - name: Install uns schema
+        if: inputs.install_uns
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          db=$(grep -E '^UNS_PG_DB=' .env | cut -d= -f2-)
+          ADAPTER="$UNS_ADAPTER" READER=grafana \
+          PSQL="docker exec -i $TIMESCALE_CONTAINER psql -U $PG_ADMIN_USER -d ${db:-home_data}" \
+            tools/install_uns.sh
+
+      - name: docker compose up
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          profile=""
+          if [ "${{ inputs.demo }}" = "true" ]; then profile="--profile demo"; fi
+          docker compose $profile config -q
+          docker compose $profile pull --quiet
+          docker compose $profile up -d --remove-orphans --wait --wait-timeout 180
+          docker compose $profile ps

@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: uns
+    folder: UNS
+    folderUid: uns
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false   # edit tools/build_dashboards.py, not the UI
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/uns

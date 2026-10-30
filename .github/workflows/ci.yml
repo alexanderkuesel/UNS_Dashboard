@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    # GitHub-hosted: never run untrusted PR code on the Pi's self-hosted runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PGHOST: localhost
+      PGPORT: "55432"
+      PGDATABASE: home_data
+      PGUSER: grafana
+      PGPASSWORD: ci-grafana
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dashboards match the generator
+        run: python3 tools/build_dashboards.py --check
+
+      - name: Shell scripts
+        run: shellcheck tools/*.sh db/demo/*.sh
+
+      - name: Start demo stack (TimescaleDB + historian schema + demo data + Grafana)
+        run: |
+          cp .env.example .env
+          sed -i -e 's/^UNS_PG_HOST=.*/UNS_PG_HOST=demo-db/' \
+                 -e 's/^UNS_PG_PASSWORD=.*/UNS_PG_PASSWORD=ci-grafana/' \
+                 -e 's/^GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=ci-admin/' .env
+          docker compose config -q
+          docker compose --profile demo up -d --wait --wait-timeout 300
+
+      - name: Every panel query runs as the read-only grafana role
+        run: python3 tools/check_queries.py --require-rows
+
+      - name: Grafana provisioned the data source and dashboards
+        run: |
+          api() { curl -fsS -u admin:ci-admin "http://localhost:3000$1"; }
+          api /api/datasources/uid/uns-historian/health | tee /dev/stderr | grep -q '"status":"OK"'
+          n=$(api '/api/search?tag=uns' | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+          echo "provisioned dashboards: $n"
+          test "$n" -eq "$(ls grafana/dashboards/*.json | wc -l)"
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --profile demo logs --tail 200

@@ -1,0 +1,15 @@
+# Copy to compose.override.yml (git-ignored) when your TimescaleDB runs in
+# another compose project / on a user-defined docker network instead of
+# publishing port 5432. Then set UNS_PG_HOST=timescaledb in .env.
+#
+# Find the network name with:  docker inspect timescaledb -f '{{json .NetworkSettings.Networks}}'
+services:
+  grafana:
+    networks:
+      - default
+      - historian
+
+networks:
+  historian:
+    external: true
+    name: my_historian_network   # <- change me
