@@ -1,7 +1,8 @@
 # UNS / ISA-95 dashboards for Grafana.
 #
 #   cp .env.example .env    # then edit
-#   docker compose up -d                    # Grafana only, uses your existing historian(s)
+#   docker compose up -d                    # Grafana; add COMPOSE_PROFILES=mariadb to .env
+#                                           #   to also run the bundled MariaDB historian
 #   docker compose --profile demo up -d     # + throw-away TimescaleDB and MariaDB with live demo data
 #                                           #   (or --profile demo-timescaledb / demo-mariadb for one)
 #
@@ -47,6 +48,35 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  # --- mariadb profile: your MariaDB historian, set up on first start -------
+  # Creates the historian database, the nodered/grafana users with the
+  # passwords from .env, and the uns views. Data lives in the mariadb-data
+  # volume. Node-RED writes to <pi-ip>:3306 (MARIADB_PORT) as user nodered.
+  mariadb:
+    profiles: ["mariadb"]
+    image: mariadb:${MARIADB_VERSION:-11.4}
+    container_name: uns-mariadb
+    restart: unless-stopped
+    command: ["--event-scheduler=ON", "--default-time-zone=+00:00"]
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in .env}
+      UNS_MARIADB_PASSWORD: ${UNS_MARIADB_PASSWORD:?set UNS_MARIADB_PASSWORD in .env}
+      NODERED_MARIADB_PASSWORD: ${NODERED_MARIADB_PASSWORD:?set NODERED_MARIADB_PASSWORD in .env}
+    ports:
+      - "${MARIADB_PORT:-3306}:3306"
+    volumes:
+      - ./db:/uns/db:ro
+      - ./tools:/uns/tools:ro
+      - ./db/init/mariadb_historian.sh:/docker-entrypoint-initdb.d/10-uns.sh:ro
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      # --connect fails while the init-time server runs with skip-networking
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
 
   # --- demo profiles: self-contained databases with 14 days of history -----
   demo-db:
@@ -103,12 +133,13 @@ services:
     environment:
       MARIADB_ROOT_PASSWORD: ${DEMO_MARIADB_ROOT_PASSWORD:-root}
       UNS_MARIADB_PASSWORD: ${UNS_MARIADB_PASSWORD:?set UNS_MARIADB_PASSWORD in .env}
+      UNS_DEMO: "1"
     ports:
       - "127.0.0.1:${DEMO_MARIADB_PORT:-53306}:3306"
     volumes:
       - ./db:/uns/db:ro
       - ./tools:/uns/tools:ro
-      - ./db/demo/initdb_mariadb.sh:/docker-entrypoint-initdb.d/10-uns-demo.sh:ro
+      - ./db/init/mariadb_historian.sh:/docker-entrypoint-initdb.d/10-uns.sh:ro
       - demo-mariadb-data:/var/lib/mysql
     healthcheck:
       # --connect fails while the init-time server runs with skip-networking
@@ -122,3 +153,4 @@ volumes:
   grafana-data:
   demo-db-data:
   demo-mariadb-data:
+  mariadb-data:
