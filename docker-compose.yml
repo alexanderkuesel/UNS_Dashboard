@@ -1,0 +1,91 @@
+# UNS / ISA-95 dashboards for Grafana.
+#
+#   cp .env.example .env    # then edit
+#   docker compose up -d                    # Grafana only, uses your existing TimescaleDB
+#   docker compose --profile demo up -d     # + a throw-away TimescaleDB with live demo data
+#
+# Images are multi-arch, so this runs unchanged on a Raspberry Pi (arm64).
+
+services:
+  grafana:
+    image: grafana/grafana-oss:${GRAFANA_VERSION:-12.4.3}
+    container_name: uns-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/uns/uns-overview.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000/}
+      # consumed by grafana/provisioning/datasources/uns.yaml
+      UNS_PG_HOST: ${UNS_PG_HOST:-host.docker.internal}
+      UNS_PG_PORT: ${UNS_PG_PORT:-5432}
+      UNS_PG_DB: ${UNS_PG_DB:-home_data}
+      UNS_PG_USER: ${UNS_PG_USER:-grafana}
+      UNS_PG_PASSWORD: ${UNS_PG_PASSWORD:?set UNS_PG_PASSWORD in .env}
+      UNS_PG_SSLMODE: ${UNS_PG_SSLMODE:-disable}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards/uns:ro
+      - grafana-data:/var/lib/grafana
+    extra_hosts:
+      # lets the container reach a TimescaleDB that publishes 5432 on the Pi itself
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # --- demo profile: self-contained database with 14 days of history -------
+  demo-db:
+    profiles: ["demo"]
+    image: timescale/timescaledb:${TIMESCALEDB_VERSION:-2.30.2-pg17}
+    container_name: uns-demo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${DEMO_PG_ADMIN_PASSWORD:-postgres}
+      POSTGRES_DB: ${UNS_PG_DB:-home_data}
+      UNS_PG_PASSWORD: ${UNS_PG_PASSWORD:?set UNS_PG_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${DEMO_PG_PORT:-55432}:5432"
+    volumes:
+      - ./db:/uns/db:ro
+      - ./tools:/uns/tools:ro
+      - ./db/demo/initdb.sh:/docker-entrypoint-initdb.d/10-uns-demo.sh:ro
+      - demo-db-data:/var/lib/postgresql/data
+    healthcheck:
+      # TCP only: the init-time server listens on the socket alone
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  demo-feed:
+    profiles: ["demo"]
+    image: timescale/timescaledb:${TIMESCALEDB_VERSION:-2.30.2-pg17}
+    container_name: uns-demo-feed
+    restart: unless-stopped
+    depends_on:
+      demo-db:
+        condition: service_healthy
+    environment:
+      PGHOST: demo-db
+      PGUSER: postgres
+      PGPASSWORD: ${DEMO_PG_ADMIN_PASSWORD:-postgres}
+      PGDATABASE: ${UNS_PG_DB:-home_data}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "demo-feed: writing one sample per demo point every minute"
+        while true; do psql -X -q -c 'CALL demo.tick()' || true; sleep 60; done
+
+volumes:
+  grafana-data:
+  demo-db-data:
